@@ -1,10 +1,8 @@
-# pipeline_langchain.py
-# Core pipeline using LangChain, with mostly functions + LCEL graph.
 
 import io
 import re
 from typing import Dict, Any
-
+from pydub import AudioSegment
 import pdfplumber
 from PIL import Image
 
@@ -34,9 +32,9 @@ def get_llm(model_name=None):
 
 
 
-# ---------------------------
-# 1. Input router (no OOP)
-# ---------------------------
+# 
+# 1. Input router 
+# 
 
 def route_input(inputs: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -60,7 +58,7 @@ def route_input(inputs: Dict[str, Any]) -> Dict[str, Any]:
         elif filename.endswith((".mp3", ".wav", ".m4a")):
             inputs["input_type"] = "audio"
         else:
-            # default unknown file -> treat as text (you can add more cases later)
+            # default unknown file -> treat as text 
             inputs["input_type"] = "text"
     else:
         inputs["input_type"] = "text"
@@ -70,9 +68,9 @@ def route_input(inputs: Dict[str, Any]) -> Dict[str, Any]:
     return inputs
 
 
-# ---------------------------
+# 
 # 2. Content extraction helpers
-# ---------------------------
+# 
 
 def _extract_youtube_id_from_text(text: str) -> str | None:
     """
@@ -120,7 +118,7 @@ def extract_text_from_plain(user_text: str) -> Dict[str, Any]:
                 "extracted_text": transcript,
                 "meta": {"source": "youtube_transcript", "video_id": video_id},
             }
-        # Fallback: keep original text but note failure
+        # Fallback: keeping original text but note failure
         return {
             "extracted_text": cleaned,
             "meta": {
@@ -140,8 +138,7 @@ def extract_text_from_image_bytes(file_bytes: bytes) -> Dict[str, Any]:
     """
     image = Image.open(io.BytesIO(file_bytes)).convert("L")  # grayscale
 
-    # Basic pre-processing: optional (keep simple)
-    # You can add thresholding if needed.
+    # Basic pre-processing
 
     # Get word-level data so we can compute an approximate confidence
     data = pytesseract.image_to_data(
@@ -175,6 +172,7 @@ def extract_text_from_image_bytes(file_bytes: bytes) -> Dict[str, Any]:
     return {"extracted_text": extracted_text, "meta": meta}
 
 def extract_text_from_pdf_bytes(file_bytes: bytes) -> Dict[str, Any]:
+    '''extracting text from pdf using pdfplumber library'''
     text_parts = []
     with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
         for page in pdf.pages:
@@ -190,11 +188,20 @@ groq_client = Groq(api_key=GROQ_API_KEY)
 
 def extract_text_from_audio_bytes(file_bytes: bytes) -> Dict[str, Any]:
     """
-    Free STT using Groq Whisper (no payment required)
+    Use Groq Whisper for transcription, and pydub for approximate duration.
     """
     buf = io.BytesIO(file_bytes)
     if not hasattr(buf, "name"):
         buf.name = "audio.wav"
+
+    # Duration (seconds) via pydub
+    try:
+        audio_seg = AudioSegment.from_file(buf)
+        duration_sec = round(len(audio_seg) / 1000.0, 2)
+        buf.seek(0)  # rewind for STT
+    except Exception:
+        duration_sec = 0.0
+        buf.seek(0)
 
     try:
         result = groq_client.audio.transcriptions.create(
@@ -207,8 +214,12 @@ def extract_text_from_audio_bytes(file_bytes: bytes) -> Dict[str, Any]:
 
     return {
         "extracted_text": text,
-        "meta": {"source": "groq_whisper"},
+        "meta": {
+            "source": "groq_whisper",
+            "duration_sec": duration_sec,
+        },
     }
+
 
 
 def extract_content(inputs: Dict[str, Any]) -> Dict[str, Any]:
@@ -236,13 +247,13 @@ def extract_content(inputs: Dict[str, Any]) -> Dict[str, Any]:
     return inputs
 
 
-# ---------------------------
+# 
 # 3. Intent analysis with LangChain
-# ---------------------------
+# 
 
 def build_intent_chain():
     """
-    Uses LLM to decide:
+    Using LLM to decide:
       - task (summarize/sentiment/code_explain/youtube/generic_qa)
       - needs_clarification (bool)
       - clarification_question (str|None)
@@ -254,11 +265,11 @@ def build_intent_chain():
     choose the task and decide if you must ask a follow-up question.
 
     Valid tasks:
-    - "summarize"       -> summarize the content
+    - "summarize"   -> summarize the content
     - "sentiment"       -> detect sentiment/mood of the content
-    - "code_explain"    -> explain code and highlight issues
+    - "code_explain   -> explain code and highlight issues
     - "youtube"         -> summarize a YouTube video from its transcript or URL
-    - "generic_qa"      -> general question answering over the content
+    - "generic_qa" -> general question answering over the content
 
     Mandatory rule:
     - If the request is ambiguous or could mean multiple tasks,
@@ -284,9 +295,9 @@ def build_intent_chain():
     return chain
 
 
-# ---------------------------
-# 4. Task handlers (LLM-based, functional)
-# ---------------------------
+# 
+# 4. Task handler chains
+# 
 
 def build_summarize_chain():
     prompt = ChatPromptTemplate.from_messages(
@@ -339,8 +350,7 @@ def build_code_explain_chain():
         ]
     )
     llm = get_llm()
-    parser = JsonOutputParser()
-    return prompt | llm | parser
+    return prompt | llm 
 
 def build_generic_qa_chain():
     prompt = ChatPromptTemplate.from_messages(
@@ -374,9 +384,9 @@ def build_youtube_chain():
     return prompt | llm
 
 
-# ---------------------------
+# 
 # 5. Decision logic using RunnableBranch
-# ---------------------------
+# 
 
 def build_task_branch():
     summarize_chain = build_summarize_chain()
@@ -407,7 +417,6 @@ def build_task_branch():
             lambda x: x["intent"]["task"] == "youtube",
             RunnableLambda(lambda x: youtube_chain.invoke({"extracted_text": x["extracted_text"]})),
         ),
-        # default: generic_qa
         RunnableLambda(lambda x: generic_chain.invoke({"extracted_text": x["extracted_text"], "user_text": x["user_text"]})),
     )
 
@@ -454,9 +463,9 @@ def clarify_or_execute(inputs: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-# ---------------------------
+# 
 # 6. Build the full pipeline chain
-# ---------------------------
+# 
 
 def build_pipeline():
     """
@@ -489,11 +498,6 @@ def build_pipeline():
     # Step 3: clarify or execute
     full_chain = with_intent | RunnableLambda(clarify_or_execute)
     return full_chain
-
-
-# ---------------------------
-# 7. Convenience function for non-LangChain callers
-# ---------------------------
 
 PIPELINE_CHAIN = build_pipeline()
 

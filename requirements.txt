@@ -12,4 +12,5 @@ python-dotenv
 pytesseract
 youtube-transcript-api
 langchain-groq
+pydub
 

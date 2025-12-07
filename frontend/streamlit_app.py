@@ -3,11 +3,11 @@ import sys
 
 import streamlit as st
 
-from app.pipeline_langchain import run_pipeline
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
+from app.pipeline_langchain import run_pipeline
 
 
 
@@ -26,41 +26,57 @@ def render_result(r):
     if not r:
         st.write("No result.")
         return
+
+    # Plain string
     if isinstance(r, str):
         st.write(r)
         return
 
-    # Summary
+    # LangChain AIMessage or similar -> use .content
+    if hasattr(r, "content"):
+        st.write(r.content)
+        return
+
+    # Anything that is not a dict -> just show it
+    if not isinstance(r, dict):
+        st.write(r)
+        return
+
+    # ---- Summary ----
     if {"one_liner", "bullets", "paragraph"} <= r.keys():
-        st.info(f"**🧾 One-liner:** {r['one_liner']}")
+        st.info(f"🧾 {r['one_liner']}")
         st.markdown("**📌 Key Points:**")
         st.markdown("\n".join(f"- {b}" for b in r["bullets"]))
         st.markdown("**📖 Detailed:**")
         st.write(r["paragraph"])
-        
         return
 
-    # Sentiment
+    # ---- Sentiment ----
     if {"label", "confidence", "justification"} <= r.keys():
-        st.markdown(f"**🎭 Sentiment:** {r['label'].title()} ({round(r['confidence']*100,1)}%)")
+        st.markdown(
+            f"🎭 **Sentiment:** {r['label'].title()} "
+            f"({round(float(r['confidence']) * 100, 1)}%)"
+        )
         st.write(f"**Why?** {r['justification']}")
         return
 
-    # Code explain
+    # ---- Code explain ----
     if {"high_level", "step_by_step", "issues"} <= r.keys():
-        st.markdown(f"**🧠 High-level:** {r['high_level']}")
+        st.markdown(f"🧠 **High-level:** {r['high_level']}")
         st.markdown("**🪜 Steps:**")
         st.write(r["step_by_step"])
         st.markdown("**⚠ Issues:**")
         issues = r["issues"]
-        st.markdown("\n".join(f"- {i}" for i in issues)) if isinstance(issues, list) else st.write(issues)
+        if isinstance(issues, list):
+            st.markdown("\n".join(f"- {i}" for i in issues))
+        else:
+            st.write(issues)
         if r.get("time_complexity"):
             st.markdown(f"**⏱ Complexity:** {r['time_complexity']}")
         return
 
-    # Fallback
+    # Fallback: unknown dict shape
     st.json(r)
-
 
 
 
