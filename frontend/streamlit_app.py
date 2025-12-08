@@ -44,10 +44,11 @@ def render_result(r):
 
     # ---- Summary ----
     if {"one_liner", "bullets", "paragraph"} <= r.keys():
-        st.info(f"🧾 {r['one_liner']}")
-        st.markdown("**📌 Key Points:**")
+        st.info("🧾 KEY ONE LINER:")
+        st.markdown(f" {r['one_liner']}")
+        st.info("**📌 KEY POINTS:**")
         st.markdown("\n".join(f"- {b}" for b in r["bullets"]))
-        st.markdown("**📖 Detailed:**")
+        st.info("**📖 DETAILED:**")
         st.write(r["paragraph"])
         return
 
