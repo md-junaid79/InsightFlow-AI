@@ -110,7 +110,7 @@ http://localhost:8501
 ```
 
 <p align="center">
-  <img src="images\UI Screenshot.png" alt="UI PREVIEW" width="650"/>
+  <img src="images\UI Screenshot.png" alt="UI PREVIEW" />
 </p>
 
 ---
