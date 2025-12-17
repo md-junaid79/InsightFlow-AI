@@ -1,25 +1,35 @@
 
 import io
 import re
-from typing import Dict, Any
-from pydub import AudioSegment
+from typing import Any, Dict
+
 import pdfplumber
-from PIL import Image
-
 import pytesseract
-from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
-from langchain_groq import ChatGroq
 from groq import Groq
-
+from langchain_core.output_parsers import JsonOutputParser
 
 # from openai import OpenAI
 # from langchain_openai import ChatOpenAI
-
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import JsonOutputParser
-from langchain_core.runnables import RunnableLambda, RunnableBranch, RunnableParallel
+from langchain_core.runnables import RunnableBranch, RunnableLambda, RunnableParallel
+from langchain_groq import ChatGroq
+from PIL import Image
+from pydub import AudioSegment
+from youtube_transcript_api import YouTubeTranscriptApi
+# from youtube_transcript_api import (
+#     NoTranscriptFound,
+#     TranscriptsDisabled,
+#     YouTubeTranscriptApi,
+# )
 
-from .config import GROQ_API_KEY, GROQ_LLM_MODEL,GROQ_STT_MODEL,TESSERACT_LANG,YOUTUBE_TRANSCRIPT_LANG
+from .config import (
+    GROQ_API_KEY,
+    GROQ_LLM_MODEL,
+    GROQ_STT_MODEL,
+    TESSERACT_LANG,
+    YOUTUBE_TRANSCRIPT_LANG,
+)
+
 
 def get_llm(model_name=None):
     model_name = model_name or GROQ_LLM_MODEL
@@ -81,7 +91,8 @@ def _extract_youtube_id_from_text(text: str) -> str | None:
     youtube_id_pattern = r"(?:v=|be/|embed/|shorts/)([A-Za-z0-9_-]{11})"
     match = re.search(youtube_id_pattern, text)
     if match:
-        return match.group(1)
+        k = match.group(1)
+        return k
     return None
 
 
@@ -90,15 +101,12 @@ def _fetch_youtube_transcript(video_id: str) -> str | None:
     Fetch transcript for a given video_id using youtube-transcript-api.
     Returns raw transcript text or None on failure.
     """
+    ytt_api = YouTubeTranscriptApi()
     try:
-        transcript = YouTubeTranscriptApi.get_transcript(
-            video_id,
-            languages=[YOUTUBE_TRANSCRIPT_LANG],
-        )
-        parts = [chunk["text"] for chunk in transcript if chunk["text"].strip()]
-        return " ".join(parts).strip()
-    except (TranscriptsDisabled, NoTranscriptFound):
-        return None
+        fetched_transcript = ytt_api.fetch(video_id)
+        snippets = [snippet.text for snippet in fetched_transcript]
+        return " ".join(snippets).strip()
+
     except Exception:
         return None
 
