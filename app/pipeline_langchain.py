@@ -331,17 +331,17 @@ def build_sentiment_chain():
             (
                 "user",
                 "Analyze the sentiment of the content below.\n"
-                "Return JSON with keys:\n"
-                "- label (one of 'positive','negative','neutral')\n"
-                "- confidence (0-1)\n"
-                "- justification (short explanation)\n\n"
+                '''Return JSON with keys:
+                " label: (one of 'positive','negative','neutral')
+                " confidence: (0-1)
+                " justification: (short explanation)\n\n'''
                 "Content:\n{extracted_text}",
             ),
         ]
     )
     llm = get_llm()
-    parser = JsonOutputParser()
-    return prompt | llm | parser
+    # parser = JsonOutputParser()
+    return prompt | llm #| parser
 
 def build_code_explain_chain():
     prompt = ChatPromptTemplate.from_messages(
