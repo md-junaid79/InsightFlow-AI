@@ -1,4 +1,3 @@
-
 import io
 import re
 from typing import Any, Dict
@@ -16,18 +15,13 @@ from langchain_groq import ChatGroq
 from PIL import Image
 from pydub import AudioSegment
 from youtube_transcript_api import YouTubeTranscriptApi
-# from youtube_transcript_api import (
-#     NoTranscriptFound,
-#     TranscriptsDisabled,
-#     YouTubeTranscriptApi,
-# )
+
 
 from .config import (
     GROQ_API_KEY,
     GROQ_LLM_MODEL,
     GROQ_STT_MODEL,
     TESSERACT_LANG,
-    YOUTUBE_TRANSCRIPT_LANG,
 )
 
 
@@ -46,7 +40,7 @@ def get_llm(model_name=None):
 # 1. Input router 
 # 
 
-def route_input(inputs: Dict[str, Any]) -> Dict[str, Any]:
+def route_input(inputs):
     """
     Decide input_type based on uploaded file (if any).
     Expects:
@@ -82,7 +76,7 @@ def route_input(inputs: Dict[str, Any]) -> Dict[str, Any]:
 # 2. Content extraction helpers
 # 
 
-def _extract_youtube_id_from_text(text: str) -> str | None:
+def extract_youtube_id(text):
     """
     Try to find a YouTube video id in the text.
     Supports full URLs and short links.
@@ -96,7 +90,7 @@ def _extract_youtube_id_from_text(text: str) -> str | None:
     return None
 
 
-def _fetch_youtube_transcript(video_id: str) -> str | None:
+def fetch_youtube_transcript(video_id):
     """
     Fetch transcript for a given video_id using youtube-transcript-api.
     Returns raw transcript text or None on failure.
@@ -111,16 +105,16 @@ def _fetch_youtube_transcript(video_id: str) -> str | None:
         return None
 
 
-def extract_text_from_plain(user_text: str) -> Dict[str, Any]:
+def extract_text_from_plain(user_text):
     """
     - If there is a YouTube URL/id, try to fetch transcript.
     - Otherwise just clean and return the raw text.
     """
     cleaned = user_text.strip()
-    video_id = _extract_youtube_id_from_text(cleaned)
+    video_id = extract_youtube_id(cleaned)
 
     if video_id:
-        transcript = _fetch_youtube_transcript(video_id)
+        transcript = fetch_youtube_transcript(video_id)
         if transcript:
             return {
                 "extracted_text": transcript,
@@ -139,7 +133,7 @@ def extract_text_from_plain(user_text: str) -> Dict[str, Any]:
     return {"extracted_text": cleaned, "meta": {"source": "plain_text"}}
 
 
-def extract_text_from_image_bytes(file_bytes: bytes) -> Dict[str, Any]:
+def extract_text_from_image_bytes(file_bytes):
     """
     Use Tesseract OCR via pytesseract to read text from an image.
     Returns extracted_text and an approximate confidence.
@@ -179,7 +173,7 @@ def extract_text_from_image_bytes(file_bytes: bytes) -> Dict[str, Any]:
     }
     return {"extracted_text": extracted_text, "meta": meta}
 
-def extract_text_from_pdf_bytes(file_bytes: bytes) -> Dict[str, Any]:
+def extract_text_from_pdf_bytes(file_bytes):
     '''extracting text from pdf using pdfplumber library'''
     text_parts = []
     with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
@@ -194,7 +188,7 @@ def extract_text_from_pdf_bytes(file_bytes: bytes) -> Dict[str, Any]:
 
 groq_client = Groq(api_key=GROQ_API_KEY)
 
-def extract_text_from_audio_bytes(file_bytes: bytes) -> Dict[str, Any]:
+def extract_text_from_audio_bytes(file_bytes):
     """
     Use Groq Whisper for transcription, and pydub for approximate duration.
     """
@@ -230,7 +224,7 @@ def extract_text_from_audio_bytes(file_bytes: bytes) -> Dict[str, Any]:
 
 
 
-def extract_content(inputs: Dict[str, Any]) -> Dict[str, Any]:
+def extract_content(inputs):
     """
     Switch by input_type and attach extracted_text + meta.
     Keeps user_text & other fields.
@@ -403,7 +397,7 @@ def build_task_branch():
     generic_chain = build_generic_qa_chain()
     youtube_chain = build_youtube_chain()
 
-    def task_selector(inputs: Dict[str, Any]) -> str:
+    def task_selector(inputs):
         return inputs["intent"]["task"]
 
     # Each branch expects a dict with extracted_text/user_text etc.
@@ -431,7 +425,7 @@ def build_task_branch():
     return branch
 
 
-def clarify_or_execute(inputs: Dict[str, Any]) -> Dict[str, Any]:
+def clarify_or_execute(inputs):
     """
     Final decision step.
     If needs_clarification -> return mode=clarify
@@ -509,9 +503,9 @@ def build_pipeline():
 
 PIPELINE_CHAIN = build_pipeline()
 
-def run_pipeline(user_text: str, file_bytes: bytes | None, filename: str | None) -> Dict[str, Any]:
+def run_pipeline(user_text, file_bytes, filename):
     """
-    Helper to call from Streamlit/FastAPI:
+    Helper to call from Streamlit:
     returns dict with:
       - mode: "clarify" or "result"
       - clarification_question
