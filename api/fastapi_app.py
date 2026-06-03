@@ -8,8 +8,6 @@ from app.pipeline_langchain import run_pipeline
 
 app = FastAPI(title="InsightFlow AI API")
 
-# Permissive CORS for multi-modal clients (web, mobile, desktop)
-# Production: restrict to specific domains and implement rate limiting
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -19,10 +17,7 @@ app.add_middleware(
 )
 
 @app.post("/process")
-async def process_input(
-    user_text: Optional[str] = Form(None),
-    file: Optional[UploadFile] = File(None),
-):
+async def process_input(user_text = Form(None),file = File(None)):
     # Handle optional file input; extract filename for content type detection
     file_bytes = None
     filename = None
