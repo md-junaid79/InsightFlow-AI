@@ -1,5 +1,6 @@
 import io
 import re
+import time
 from typing import Any, Dict
 
 import pdfplumber
@@ -23,6 +24,7 @@ from .config import (
     GROQ_STT_MODEL,
     TESSERACT_LANG,
 )
+from .cost_tracker import get_cost_tracker
 
 
 def get_llm(model_name=None):
@@ -33,6 +35,33 @@ def get_llm(model_name=None):
         temperature=0,
         max_tokens=2048,
     )
+
+
+def log_llm_response(task_name: str):
+    """
+    Returns a function that logs LLM response with token counts.
+    Use as: response | RunnableLambda(log_llm_response("task_name"))
+    """
+    def _log(response):
+        tracker = get_cost_tracker()
+        # Extract token usage from response metadata
+        metadata = getattr(response, "response_metadata", {}) or {}
+        usage = metadata.get("token_usage", {})
+        
+        input_tokens = usage.get("prompt_tokens", 0)
+        output_tokens = usage.get("completion_tokens", 0)
+        
+        if input_tokens > 0 or output_tokens > 0:
+            tracker.log_llm_call(
+                task=task_name,
+                model=GROQ_LLM_MODEL,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
+        
+        return response
+    
+    return _log
 
 
 
@@ -211,6 +240,11 @@ def extract_text_from_audio_bytes(file_bytes):
             model=GROQ_STT_MODEL,
         )
         text = result.text.strip()
+        
+        # Log audio cost
+        tracker = get_cost_tracker()
+        tracker.log_audio_call(duration_sec=duration_sec)
+        
     except Exception as e:
         text = f"[Transcription failed: {e}]"
 
@@ -293,7 +327,7 @@ def build_intent_chain():
     llm = get_llm()
     parser = JsonOutputParser()
 
-    chain = prompt | llm | parser
+    chain = prompt | llm | RunnableLambda(log_llm_response("intent_detection")) | parser
     return chain
 
 
@@ -316,7 +350,7 @@ def build_summarize_chain():
     )
     llm = get_llm()
     parser = JsonOutputParser()
-    return prompt | llm | parser
+    return prompt | llm | RunnableLambda(log_llm_response("summarize")) | parser
 
 def build_sentiment_chain():
     prompt = ChatPromptTemplate.from_messages(
@@ -334,8 +368,7 @@ def build_sentiment_chain():
         ]
     )
     llm = get_llm()
-    # parser = JsonOutputParser()
-    return prompt | llm #| parser
+    return prompt | llm | RunnableLambda(log_llm_response("sentiment"))
 
 def build_code_explain_chain():
     prompt = ChatPromptTemplate.from_messages(
@@ -352,7 +385,7 @@ def build_code_explain_chain():
         ]
     )
     llm = get_llm()
-    return prompt | llm 
+    return prompt | llm | RunnableLambda(log_llm_response("code_explain")) 
 
 def build_generic_qa_chain():
     prompt = ChatPromptTemplate.from_messages(
@@ -367,7 +400,7 @@ def build_generic_qa_chain():
         ]
     )
     llm = get_llm()
-    return prompt | llm  # text output is fine
+    return prompt | llm | RunnableLambda(log_llm_response("generic_qa"))
 
 def build_youtube_chain():
     # Here we assume extracted_text already contains transcript or description
@@ -383,7 +416,7 @@ def build_youtube_chain():
         ]
     )
     llm = get_llm()
-    return prompt | llm
+    return prompt | llm | RunnableLambda(log_llm_response("youtube"))
 
 
 # 

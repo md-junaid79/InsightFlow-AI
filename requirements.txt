@@ -13,4 +13,5 @@ pytesseract
 youtube-transcript-api
 langchain-groq
 pydub
+plotly
 
